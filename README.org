@@ -1,0 +1,2 @@
+* Why
+When I wrote this, I had found out about the repository [[https://github.com/papis/papis][papis]] which is pretty nice. However, when I checked out the [[https://github.com/papis/papis-zotero][papis-zotero]] repository, I realized that the repository was a bit outdated, some of its documentation was a little outdated, and it didn't particularly do what I wanted it to do. 
