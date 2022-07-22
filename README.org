@@ -5,6 +5,42 @@ What I particularly wanted was a tool which allowed one to parse the information
 
 * Installation
 
+First clone the repository and go into the repository.
 
+#+begin_src bash
+git clone https://github.com/nicolasshu/zotero2papis
+#+end_src
 
+To set it up, you may either use as an editable package:
 
+#+begin_src bash
+  pip install -e .
+#+end_src
+
+Or as a binary package on your environment:
+
+#+begin_src bash
+  python3 setup.py install
+  # or
+  pip install .
+#+end_src
+
+* Usage
+
+To use it, simply run
+
+#+begin_src bash
+  zotero2papis -z {location_of_zotero} -o {output_location}
+#+end_src
+
+where the =-z= / =--zotdir= will be the parent directory of where your Zotero database is located (e.g. =~/Zotero= or =~/sync/zotero=) and =-o= / =--outdir= will be the output directory. If the output directory does not exist, then the program will make the appropriate directories for you.
+
+This will then start copying the files to the output directory. It will be first looking through the database to see where the files or linked files are originally located.
+
++ If the output directory is the same directory that the PDF files are already stored, then:
+  * It will copy the attachments from the Zotero storage to the output directory
+  * It will create the YAML files in the output directory
++ If the output directory is at a different location, then:
+  * It will copy the PDFs from the location they are originally stored to the output directory
+  * It will copy the attachments from the Zotero storage to the output directory
+  * It will create the YAML files in the output directory

@@ -1,2 +1,4 @@
 *.egg-info/*
 zotero2papis/__pycache__/
+build
+dist
