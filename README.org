@@ -44,3 +44,9 @@ This will then start copying the files to the output directory. It will be first
   * It will copy the PDFs from the location they are originally stored to the output directory
   * It will copy the attachments from the Zotero storage to the output directory
   * It will create the YAML files in the output directory
+
+At this point, you can start to use papis on the output directory or to copy the contents to your desired papis library. In case you do not see any updates on your papis despite you having changed the directory or moved the files, clear the cache by running the following as suggested in the [[https://papis.readthedocs.io/en/latest/faq.html][FAQ]].
+
+#+begin_src bash
+papis --clear-cache
+#+end_src
