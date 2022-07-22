@@ -9,7 +9,7 @@ import shutil
 
 
 class ZoteroSQLParser:
-    def __init__(self, zot_dir, output_dir, verbose=True):
+    def __init__(self, zot_dir, output_dir, verbose=False):
         self.zot_dir = zot_dir
         self.out_dir = output_dir
         self.initialize_attributes()
@@ -217,7 +217,6 @@ class ZoteroSQLParser:
             key, path, mime, parentID = attachment_row
             if self.V: print(" ")
             if self.V: print("    KEY  ", key)
-            if self.V: print("    PATH ", os.path.dirname(path))
             if self.V: print("    PATH ", path)
             if self.V: print("    PARID", parentID)
             dirname = os.path.basename(os.path.dirname(path))
@@ -225,10 +224,19 @@ class ZoteroSQLParser:
             if self.V: print("    DIR: ", dirname)
             original = os.path.join(self.zot_dir, "storage", key, os.path.basename(path))
             dest = os.path.join(target_dir,os.path.basename(path))
+            files.append(os.path.basename(path))
             if self.V: print("      original:", original)
             if self.V: print("      dest:    ", dest)
-            files.append(os.path.basename(path))
+            if os.path.exists(dest) and not os.path.exists(original):
+                print("  File has already been moved")
+            elif path != dest:
+                print(path)
+                if not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                shutil.copyfile(path, dest)
+                print(f"  File has been copied to {dest}")
 
+                
         if self.V: print("===================================")
         print(f"File: {os.path.basename(path)}")
         # Look for other files associated with the current parent entry
@@ -264,14 +272,16 @@ class ZoteroSQLParser:
             if self.V: print("      Orig: ", original)
             if self.V: print("      Dest: ", dest)
             files.append(filename)
-            if os.path.exists(original) and os.path.exists(dest):
-                try:
-                    shutil.copyfile(original, dest)
-                except:
-                    print(f"failed to export attachment {key}: {path} ({mime})")
-            else:
+            if os.path.exists(dest):
                 print(f"    {filename}: Already exists")
-
+            else:
+                if os.path.exists(original):
+                    try:
+                        shutil.copyfile(original, dest)
+                    except:
+                        print(f"failed to export attachment {key}: {path} ({mime})")
+                else:
+                    print(f"The original file {original} does not exist")
 
         if files == [] and defaultFile:
             files.append(defaultFile)
@@ -367,15 +377,14 @@ class ZoteroSQLParser:
 
 import click
 @click.command()
-@click.option("--zotdir",help="parent directory of Zotero database")
-@click.option("--outdir",help="output directory")
-def run(zotdir, outdir):
-    client = ZoteroSQLParser(zotdir, outdir)
+@click.option("--zotdir", "-z", help="parent directory of Zotero database")
+@click.option("--outdir", "-o", help="output directory")
+@click.option("--verbose", "-v", is_flag = True, help="whether to show verbose logs")
+@click.help_option("-h")
+def run(zotdir, outdir, verbose):
+    client = ZoteroSQLParser(zot_dir=zotdir, output_dir=outdir, verbose=verbose)
     client.run()
 
 if __name__ == "__main__":
     run()
-
-
-
 
