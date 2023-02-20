@@ -221,6 +221,7 @@ class ZoteroSQLParser:
             if self.V: print("    PARID", parentID)
             dirname = os.path.basename(os.path.dirname(path))
             target_dir = os.path.join(self.out_dir, dirname)
+            if not self.V: print(f"{dirname}")
             if self.V: print("    DIR: ", dirname)
             original = os.path.join(self.zot_dir, "storage", key, os.path.basename(path))
             dest = os.path.join(target_dir,os.path.basename(path))
@@ -228,9 +229,12 @@ class ZoteroSQLParser:
             if self.V: print("      original:", original)
             if self.V: print("      dest:    ", dest)
             if os.path.exists(dest) and not os.path.exists(original):
-                print("  File has already been moved")
+                print("    File in the path below has already been moved")
+                print(f"       {original}")
             elif path != dest:
-                print(path)
+                if not os.path.exists(path):
+                    print(f"\tThe file in the path\n\t  {path}\n\tdoes not exist")
+                    continue
                 if not os.path.exists(target_dir):
                     os.makedirs(target_dir)
                 shutil.copyfile(path, dest)
@@ -238,7 +242,9 @@ class ZoteroSQLParser:
 
                 
         if self.V: print("===================================")
-        print(f"File: {os.path.basename(path)}")
+        print( "  Now parsing other storage files for...")
+        print(f"      {os.path.basename(path)}")
+
         # Look for other files associated with the current parent entry
         item_attachment_query = f"""
         SELECT
@@ -264,6 +270,13 @@ class ZoteroSQLParser:
 
             # If the file is not a storage file, continue onto the next file
             if path[:8] != "storage:": continue
+
+            print(f"  Storage File: {path[8:]}")
+
+            # Check to see if the file exists
+            if not os.path.exists(path):
+                print(f"\tThe file in path {path} does not exist. Skipping it.")
+                continue
 
             # Otherwise, copy the file
             filename = path[8:]
@@ -361,11 +374,16 @@ class ZoteroSQLParser:
             item.update(files)
             item.update({"ref": ref})
 
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir)
+            skip = True
+            for f in files["files"]:
+                if not os.path.exists(target_dir) and os.path.exists(os.path.join(target_dir,f)):
+                    os.makedirs(target_dir)
+                    skip = False
+                    break
 
-            with open(os.path.join(target_dir, "info.yaml"), "w+") as f:
-                yaml.dump(item, f, default_flow_style=False)
+            if not skip:
+                with open(os.path.join(target_dir, "info.yaml"), "w+") as f:
+                    yaml.dump(item, f, default_flow_style=False)
 
             if self.V: print("\n\n") 
 
