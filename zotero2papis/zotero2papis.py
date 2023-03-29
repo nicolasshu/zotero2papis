@@ -5,12 +5,16 @@ import os
 import glob
 import re
 import shutil
+import ipdb
 # %%
 
 
 class ZoteroSQLParser:
     def __init__(self, zot_dir, output_dir, verbose=False):
+        # Setup the Zotero config root directory
         self.zot_dir = zot_dir
+
+        # Setup the output directory (Ideally where papis will look for papers)
         self.out_dir = output_dir
         self.initialize_attributes()
         self.V = verbose
@@ -19,6 +23,8 @@ class ZoteroSQLParser:
         self.defaultFile = None
         self.translatedFields = {"DOI": "doi"}
         self.translatedTypes = {"journalArticle": "article"}
+
+        # Define the attachments to look for
         self.includedAttachments = {"application/vnd.ms-htmlhelp":  "chm",
                             "image/vnd.djvu": "djvu",
                             "application/msword":  "doc",
@@ -35,10 +41,12 @@ class ZoteroSQLParser:
         self.excludedTypes.append("attachment")
         self.excludedTypeTuple = self.getTuple(self.excludedTypes)
 
-        pass
     def getTuple(self, elements):
         """
-        Concatenate given strings to SQL tule of strings
+        Concatenate given strings to SQL tuple of strings. E.g.
+        Let elements = ['thing1', 'thing2', 'thing3']. The output will be:
+
+            '("thing1","thing2","thing3")'
 
         Arguments:
             elements: array-like iterable of strings
@@ -56,12 +64,26 @@ class ZoteroSQLParser:
 
     def getFields(self, conn, itemID):
         """
-        Query the fields via a SQL connection for an item's ID
+        Query the fields via a SQL connection for an item's ID, returning a dictionary.
+        For example, it will return:
+            {'title': 'Title of Article',
+             'abstractNote': 'Abstract of the article',
+             'date': '2017-12-05 2017-12-05',
+             'libraryCatalog': 'arXiv.org',
+             'url': 'http://arxiv.org/abs/xxxx.xxxxx',
+             'accessDate': '2022-07-22 23:44:23',
+             'extra': 'arXiv:xxxx.xxxxx [cs]',
+             'doi': '10.48550/arXiv.xxxx.xxxxx',
+             'repository': 'arXiv',
+             'archiveID': 'arXiv:xxxx.xxxxx'
+            }
 
         Arguments:
             conn (sqlite3.Connection): An SQL connection
             itemID (int): An integer representing the ID of an
                 entry on the Zotero SQL database
+        Returns:
+            (dict) Dictionary containing all of the fields of interest
         """
         item_field_query = f"""
         SELECT
@@ -88,13 +110,23 @@ class ZoteroSQLParser:
     def getCreators(self, conn, itemID):
         """
         Query the creators of the article via a SQL connection for an item's ID. This
-            will create a list of creators, and a single string containing all of the
-            creators
+            will create a dict of creators, which contains a list of dictionaries for
+            all of the authors, and a single string containing all of the creators.
+            For example:
+
+            {'author': 'lastA, firstA and lastB, firstB and lastC, firstC'
+             'author_list': [{'given_name': 'firstA', 'surname': 'lastA'},
+                             {'given_name': 'firstB', 'surname': 'lastB'},
+                             {'given_name': 'firstC', 'surname': 'lastC'}
+                            ]
+            }
 
         Arguments:
             conn (sqlite3.Connection): An SQL connection
             itemID (int): An integer representing the ID of an
                 entry on the Zotero SQL database
+        Returns:
+            (dict) Dictionary containing information on all of the creators
         """
         item_creator_query = f"""
         SELECT
@@ -137,12 +169,18 @@ class ZoteroSQLParser:
 
     def getTags(self, conn, itemID):
         """
-        Query the tags via a SQL connection for an item's ID
+        Query the tags via a SQL connection for an item's ID. For example:
+            {"tags": {"Computer Science - Computation and Language",
+                      "Computer Science - Machine Learning"
+                     }
+            }
 
         Arguments:
             conn (sqlite3.Connection): An SQL connection
             itemID (int): An integer representing the ID of an
                 entry on the Zotero SQL database
+        Returns:
+            (dict) Dictionary containing a set of all of the tags
         """
         tag_delimiter = ","
         item_tag_query = f"""
@@ -163,12 +201,16 @@ class ZoteroSQLParser:
 
     def getCollections(self, conn, itemID):
         """
-        Query the collections via a SQL connection for an item's ID
+        Query the collections via a SQL connection for an item's ID. E.g.
+            {"project": {"collectionA", "collectionB"}}
 
         Arguments:
             conn (sqlite3.Connection): An SQL connection
             itemID (int): An integer representing the ID of an
                 entry on the Zotero SQL database
+        Returns:
+            (dict) Dictionary containing a set of all the collections
+                associated with this item
         """
         item_collection_query = f"""
         SELECT
@@ -193,6 +235,9 @@ class ZoteroSQLParser:
             itemID (int): An integer representing the ID of an
                 entry on the Zotero SQL database
         """
+        # ===================================================================
+        # COPY THE PDF FILE
+        # ===================================================================
         # Create a query for the main PDF document
         mimeTypes = self.getTuple(self.includedAttachments.keys())
         attachment_cur = conn.cursor()
@@ -209,41 +254,78 @@ class ZoteroSQLParser:
             itemAttachments.contentType IN {mimeTypes} AND
             items.itemID = itemAttachments.itemID
         """
+        # The last line "items.itemID = itemAttachments.itemID" ensures it
+        # it only returns the main attachment (i.e. PDF)
+
+        # Perform the SQL query
         attachment_cur.execute(item_attachment_query)
+        # attachment_cur now is a sqlite3.Cursor object
 
         # Look for the main file associated with the current entry
         files = []
         for attachment_row in attachment_cur:
+            # Obtain the item information from the cursor
             key, path, mime, parentID = attachment_row
-            if self.V: print(" ")
+            # Information:
+            #    key:      (str) Zotero unique key identifier (e.g. 'ABCDEF1G')
+            #    mime:     (str) Filetype (e.g. 'application/pdf')
+            #    path:     (str) Path to the file location
+            #    parentID: (int) ID of the parent
+            # if self.V: print(" ")
             if self.V: print("    KEY  ", key)
             if self.V: print("    PATH ", path)
             if self.V: print("    PARID", parentID)
+
+            # Directory name of the paper (e.g. title of the paper). E.g. 
+            #    'Attention Is All You Need'
             dirname = os.path.basename(os.path.dirname(path))
+
+            # Directory destination where file will be copied. E.g.
+            #    './papers/Attention Is All You Need'
             target_dir = os.path.join(self.out_dir, dirname)
-            if not self.V: print(f"{dirname}")
+            # if not self.V: print(f"{dirname}")
             if self.V: print("    DIR: ", dirname)
+
+            # Compile the location where the file is supposed to be
+            # stored by Zotero. E.g.
+            #    './zotero/storage/{ABCDEF1G}/{author_year_title}.pdf
+            #
+            # The filename is defined in
+            #   Tools > ZotFile Preferences > Renaming Rules > Format for all Item Types except Patents
             original = os.path.join(self.zot_dir, "storage", key, os.path.basename(path))
+
+            # Destination where file will be stored. E.g.
+            #    './papers/Attention Is All You Need/{author_year_title}.pdf
             dest = os.path.join(target_dir,os.path.basename(path))
             files.append(os.path.basename(path))
             if self.V: print("      original:", original)
             if self.V: print("      dest:    ", dest)
             if os.path.exists(dest) and not os.path.exists(original):
+                # If the file exists at the destination and does not exist in the original
+                # location, just mention it
                 print("    File in the path below has already been moved")
                 print(f"       {original}")
             elif path != dest:
+                # If the current location of the file is not where it should be moved to,
+                # then make the directories necessary, and copy the file there.
+                # TODO: Investigate this a little more
                 if not os.path.exists(path):
-                    print(f"\tThe file in the path\n\t  {path}\n\tdoes not exist")
+                    print(f"    The file in the path below does not exist\n      {path}")
+                    if not os.path.exists(os.path.dirname(path)):
+                        ipdb.set_trace()
+                        # This entry has been deleted
+                        return None, None, True
                     continue
                 if not os.path.exists(target_dir):
                     os.makedirs(target_dir)
                 shutil.copyfile(path, dest)
                 print(f"  File has been copied to {dest}")
 
-                
-        if self.V: print("===================================")
-        print( "  Now parsing other storage files for...")
-        print(f"      {os.path.basename(path)}")
+
+        # -------------------------------------------------------------------
+        # COPY ALL OTHER FILES
+        # -------------------------------------------------------------------
+        print(f"    Now parsing other storage files for: [{os.path.basename(path)}]")
 
         # Look for other files associated with the current parent entry
         item_attachment_query = f"""
@@ -258,6 +340,10 @@ class ZoteroSQLParser:
             itemAttachments.parentItemID = {itemID} AND
             items.itemID = itemAttachments.itemID
         """
+        # This query will look for all of the files associated with the entry.
+        # It will also include the PDF
+
+        # Perform the query
         attachment_cur = conn.cursor()
         attachment_cur.execute(item_attachment_query)
         for attachment_row in attachment_cur:
@@ -269,36 +355,41 @@ class ZoteroSQLParser:
             if self.V: print("    PARID", parentID)
 
             # If the file is not a storage file, continue onto the next file
+            # Ignore the PDF file
             if path[:8] != "storage:": continue
-
-            print(f"  Storage File: {path[8:]}")
+            print(f"      Storage File: {path[8:]}")
 
             # Check to see if the file exists
-            if not os.path.exists(path):
-                print(f"\tThe file in path {path} does not exist. Skipping it.")
-                continue
+            # if not os.path.exists(path):
+            #     print(f"\tThe file in path {path} does not exist. Skipping it.")
+            #     continue
 
             # Otherwise, copy the file
             filename = path[8:]
             original = os.path.join(self.zot_dir, "storage", key, filename)
             dest = os.path.join(target_dir, filename)
-            if self.V: print("      Orig: ", original)
-            if self.V: print("      Dest: ", dest)
+            if self.V: print("      :Orig: ", original)
+            if self.V: print("      :Dest: ", dest)
             files.append(filename)
             if os.path.exists(dest):
-                print(f"    {filename}: Already exists")
+                print(f"       - Already exists")
             else:
                 if os.path.exists(original):
                     try:
-                        shutil.copyfile(original, dest)
+                        if os.path.exists(os.path.dirname(dest)):
+                            shutil.copyfile(original, dest)
+                            print(f"       - Copied")
+                        else:
+                            print(f"       - Directory does not exist: {os.path.dirname(dest)}")
                     except:
-                        print(f"failed to export attachment {key}: {path} ({mime})")
+                        ipdb.set_trace()
+                        print(f"Failed to export attachment {key}: {path} ({mime})")
                 else:
                     print(f"The original file {original} does not exist")
 
         if files == [] and defaultFile:
             files.append(defaultFile)
-        return {"files": files}, target_dir
+        return {"files": files}, target_dir, False
 
     def get_number_of_entries(self):
         conn = sqlite3.connect(os.path.join(self.zot_dir,"zotero.sqlite"))
@@ -343,12 +434,15 @@ class ZoteroSQLParser:
 
         cur.execute(items_query)
         for row in cur:
-            if self.V: print(row)
             itemID, itemType, itemKey, dateAdded, dateModified, clientDateModified = row
             itemType = self.translatedTypes.get(itemType, itemType)
 
+            # Get the field (e.g. title, abstract, date) associated with this item
             fields = self.getFields(conn, itemID)
-            if self.V: print(fields["title"])
+
+            if self.V: print("===================================")
+            if self.V: print(f'  TITLE: {fields["title"]}')
+            if not self.V: print(f"{fields['title']}")
             extra = fields.get("extra", None)
             ref = itemKey
             if extra:
@@ -363,25 +457,42 @@ class ZoteroSQLParser:
                 "modified": dateModified,
                 "modified.client": clientDateModified
             }
+
+            # Place the fields in the dictionary
             item.update(fields)
+
+            # Obtain all the authors and put them in the item dict
             creators = self.getCreators(conn, itemID)
+            if self.V: print(f'AUTHORS: {creators["author"]}')
+            if self.V: print("===================================")
             item.update(creators)
+
+            # Obtain all the tags and put them in the item dict
             tags = self.getTags(conn, itemID)
             item.update(tags)
+
+            # Obtain all the collections and put them in the item dict
             collections = self.getCollections(conn, itemID)
             item.update(collections)
-            files, target_dir = self.getFiles(conn, itemID, itemKey)
+
+            # 
+            files, target_dir, deleted_entry = self.getFiles(conn, itemID, itemKey)
+            if deleted_entry:
+                print(f"      ENTRY HAS BEEN DELETED VIA ZOTERO")
+                continue
             item.update(files)
-            item.update({"ref": ref})
 
             skip = True
             for f in files["files"]:
+                # Avoid entries that were deleted via Zotero
                 if not os.path.exists(target_dir) and os.path.exists(os.path.join(target_dir,f)):
                     os.makedirs(target_dir)
                     skip = False
                     break
 
-            if not skip:
+            # if not os.path.exists(os.path.join(target_dir, "info.yaml")):
+            # if not skip:
+            if os.path.exists(target_dir) and not os.path.exists(os.path.join(target_dir, "info.yaml")):
                 with open(os.path.join(target_dir, "info.yaml"), "w+") as f:
                     yaml.dump(item, f, default_flow_style=False)
 
