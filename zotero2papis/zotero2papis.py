@@ -6,6 +6,9 @@ import glob
 import re
 import shutil
 import ipdb
+
+import dateutil.parser
+
 # %%
 
 
@@ -282,9 +285,16 @@ class ZoteroSQLParser:
                 # 'storage:' string in the `path` variable
                 path = os.path.join(self.zot_dir, "storage", key, path[8:])
 
-            # Directory name of the paper (e.g. title of the paper). E.g. 
-            #    'Attention Is All You Need'
-            dirname = os.path.basename(os.path.dirname(path))
+                # Create a new directory name in the format of YYYY_title
+                try:
+                    date = dateutil.parser.parse(self.item["date"])
+                except:
+                    date = dateutil.parser.parse(self.item["date"][:-3])
+                dirname = os.path.join(f"{date.year}_{self.item['title']}")
+            else:
+                # Directory name of the paper (e.g. title of the paper). E.g. 
+                #    'Attention Is All You Need'
+                dirname = os.path.basename(os.path.dirname(path))
 
             # Directory destination where file will be copied. E.g.
             #    './papers/Attention Is All You Need'
@@ -327,7 +337,6 @@ class ZoteroSQLParser:
                 print(f"  File has been copied to {dest}")
 
 
-        '''
         # -------------------------------------------------------------------
         # COPY ALL OTHER FILES
         # -------------------------------------------------------------------
@@ -395,7 +404,6 @@ class ZoteroSQLParser:
 
         if files == [] and defaultFile:
             files.append(defaultFile)
-        '''
         return {"files": files}, target_dir, False
 
     def get_number_of_entries(self):
@@ -446,6 +454,9 @@ class ZoteroSQLParser:
 
             # Get the field (e.g. title, abstract, date) associated with this item
             fields = self.getFields(conn, itemID)
+            if ("date" in fields):
+                if len(fields["date"].split(" ")) > 1:
+                    fields["date"] = fields["date"].split(" ")[0]
 
             if self.V: print("===================================")
             if self.V: print(f'  TITLE: {fields["title"]}')
