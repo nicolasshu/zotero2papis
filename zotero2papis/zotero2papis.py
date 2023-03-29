@@ -5,10 +5,7 @@ import os
 import glob
 import re
 import shutil
-import ipdb
-
 import dateutil.parser
-
 # %%
 
 
@@ -397,7 +394,6 @@ class ZoteroSQLParser:
                         else:
                             print(f"       - Directory does not exist: {os.path.dirname(dest)}")
                     except:
-                        ipdb.set_trace()
                         print(f"Failed to export attachment {key}: {path} ({mime})")
                 else:
                     print(f"The original file {original} does not exist")
