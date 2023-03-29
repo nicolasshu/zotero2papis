@@ -276,6 +276,12 @@ class ZoteroSQLParser:
             if self.V: print("    PATH ", path)
             if self.V: print("    PARID", parentID)
 
+            if path[:8] == "storage:":
+                # This occurs when you add the file straight from the PDF file
+                # on the Zotero connector. Otherwise, you will not have the
+                # 'storage:' string in the `path` variable
+                path = os.path.join(self.zot_dir, "storage", key, path[8:])
+
             # Directory name of the paper (e.g. title of the paper). E.g. 
             #    'Attention Is All You Need'
             dirname = os.path.basename(os.path.dirname(path))
@@ -312,7 +318,6 @@ class ZoteroSQLParser:
                 if not os.path.exists(path):
                     print(f"    The file in the path below does not exist\n      {path}")
                     if not os.path.exists(os.path.dirname(path)):
-                        ipdb.set_trace()
                         # This entry has been deleted
                         return None, None, True
                     continue
@@ -322,6 +327,7 @@ class ZoteroSQLParser:
                 print(f"  File has been copied to {dest}")
 
 
+        '''
         # -------------------------------------------------------------------
         # COPY ALL OTHER FILES
         # -------------------------------------------------------------------
@@ -389,6 +395,7 @@ class ZoteroSQLParser:
 
         if files == [] and defaultFile:
             files.append(defaultFile)
+        '''
         return {"files": files}, target_dir, False
 
     def get_number_of_entries(self):
@@ -450,7 +457,7 @@ class ZoteroSQLParser:
                 if matches:
                     ref = matches.group(1)
 
-            item = {
+            self.item = {
                 "ref": ref,
                 "type": itemType,
                 "created": dateAdded,
@@ -459,28 +466,28 @@ class ZoteroSQLParser:
             }
 
             # Place the fields in the dictionary
-            item.update(fields)
+            self.item.update(fields)
 
             # Obtain all the authors and put them in the item dict
             creators = self.getCreators(conn, itemID)
             if self.V: print(f'AUTHORS: {creators["author"]}')
             if self.V: print("===================================")
-            item.update(creators)
+            self.item.update(creators)
 
             # Obtain all the tags and put them in the item dict
             tags = self.getTags(conn, itemID)
-            item.update(tags)
+            self.item.update(tags)
 
             # Obtain all the collections and put them in the item dict
             collections = self.getCollections(conn, itemID)
-            item.update(collections)
+            self.item.update(collections)
 
             # 
             files, target_dir, deleted_entry = self.getFiles(conn, itemID, itemKey)
             if deleted_entry:
                 print(f"      ENTRY HAS BEEN DELETED VIA ZOTERO")
                 continue
-            item.update(files)
+            self.item.update(files)
 
             skip = True
             for f in files["files"]:
@@ -494,7 +501,7 @@ class ZoteroSQLParser:
             # if not skip:
             if os.path.exists(target_dir) and not os.path.exists(os.path.join(target_dir, "info.yaml")):
                 with open(os.path.join(target_dir, "info.yaml"), "w+") as f:
-                    yaml.dump(item, f, default_flow_style=False)
+                    yaml.dump(self.item, f, default_flow_style=False)
 
             if self.V: print("\n\n") 
 
