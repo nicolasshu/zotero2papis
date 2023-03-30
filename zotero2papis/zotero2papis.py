@@ -284,6 +284,7 @@ class ZoteroSQLParser:
 
                 # Create a new directory name in the format of YYYY_title
                 try:
+                    # Try to guess any date config (e.g. YYYYMMDD, DD-MM-YYYY)
                     date = dateutil.parser.parse(self.item["date"])
                 except:
                     date = dateutil.parser.parse(self.item["date"][:-3])
@@ -291,6 +292,12 @@ class ZoteroSQLParser:
             else:
                 # Directory name of the paper (e.g. title of the paper). E.g. 
                 #    'Attention Is All You Need'
+                #
+                # You need to keep this line because if you are using Zotfile,
+                # and an article's title is too long, the directory will be
+                # cropped. So this will need to know where the PDF file was
+                # created. If you don't use Zotfile, it will always use the
+                # case above and it will save it as `papis/YYYY_title/...pdf`
                 dirname = os.path.basename(os.path.dirname(path))
 
             # Directory destination where file will be copied. E.g.
@@ -337,7 +344,7 @@ class ZoteroSQLParser:
         # -------------------------------------------------------------------
         # COPY ALL OTHER FILES
         # -------------------------------------------------------------------
-        print(f"    Now parsing other storage files for: [{os.path.basename(path)}]")
+        print(f"    Now parsing other storage files...")
 
         # Look for other files associated with the current parent entry
         item_attachment_query = f"""
