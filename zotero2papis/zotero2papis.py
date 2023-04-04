@@ -241,6 +241,7 @@ class ZoteroSQLParser:
         # Create a query for the main PDF document
         mimeTypes = self.getTuple(self.includedAttachments.keys())
         attachment_cur = conn.cursor()
+        has_pdf = False
         item_attachment_query = f"""
         SELECT
             items.key,
@@ -264,6 +265,7 @@ class ZoteroSQLParser:
         # Look for the main file associated with the current entry
         files = []
         for attachment_row in attachment_cur:
+            has_pdf = True
             # Obtain the item information from the cursor
             key, path, mime, parentID = attachment_row
             # Information:
@@ -386,7 +388,18 @@ class ZoteroSQLParser:
             # Otherwise, copy the file
             filename = path[8:]
             original = os.path.join(self.zot_dir, "storage", key, filename)
-            dest = os.path.join(target_dir, filename)
+            if has_pdf:
+                dest = os.path.join(target_dir, filename)
+            else:
+                try:
+                    date = dateutil.parser.parse(self.item["date"])
+                except:
+                    date = dateutil.parser.parse(self.item["date"][:-3])
+                dirname = os.path.join(f"{date.year}_{self.item['title']}")
+                target_dir = os.path.join(self.out_dir, dirname)
+                if not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                dest = os.path.join(target_dir, filename)
             if self.V: print("      :Orig: ", original)
             if self.V: print("      :Dest: ", dest)
             files.append(filename)
